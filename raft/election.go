@@ -68,19 +68,20 @@ func (n *Node) HandleRequestVote(req RequestVoteRequest) RequestVoteResponse {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	blk, _ := n.store.Latest()
-	if req.Term < n.currentTerm ||
-		(n.votedFor != -1 && n.votedFor != req.CandidateID) {
-		return n.rejectVoteResp()
-	}
-	if req.LastLogTerm < blk.Term ||
-		(req.LastLogTerm == blk.Term && req.LastLogIndex < blk.Index) {
-		n.currentTerm = req.Term
+	defer trySend(n.resetElectionTimerCh, struct{}{})
+
+	if req.Term < n.currentTerm {
 		return n.rejectVoteResp()
 	}
 	n.currentTerm = req.Term
+
+	blk, _ := n.store.Latest()
+	if (n.votedFor != -1 && n.votedFor != req.CandidateID) ||
+		req.LastLogTerm < blk.Term ||
+		(req.LastLogTerm == blk.Term && req.LastLogIndex < blk.Index) {
+		return n.rejectVoteResp()
+	}
 	n.votedFor = req.CandidateID
 	n.state = Follower
-	trySend(n.resetElectionTimerCh, struct{}{})
 	return n.grantVoteResp()
 }
