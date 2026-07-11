@@ -13,10 +13,14 @@ func (n *Node) sendHeartbeat(term uint64) {
 			ctx, cancel := context.WithTimeout(context.Background(), n.electionTimeout/2)
 			defer cancel()
 
-			var prevLogIndex uint64
+			var prevLogIndex, prevLogTerm uint64
 			if from > 0 {
 				prevLogIndex = from - 1
+				if prevLogBlk, ok := n.store.Get(prevLogIndex); ok {
+					prevLogTerm = prevLogBlk.Term
+				}
 			}
+
 			var entries []storage.Block
 			latestBlk, ok := n.store.Latest()
 			if ok && from <= latestBlk.Index {
@@ -30,6 +34,7 @@ func (n *Node) sendHeartbeat(term uint64) {
 				Term:         term,
 				LeaderID:     n.id,
 				PrevLogIndex: prevLogIndex,
+				PrevLogTerm:  prevLogTerm,
 				Entries:      entries,
 				LeaderCommit: 0,
 			}
@@ -52,20 +57,53 @@ func (n *Node) HandleAppendEntries(req AppendEntriesRequest) AppendEntriesRespon
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	latestBlk, _ := n.store.Latest()
-	if req.Term < n.currentTerm ||
-		(req.Entries != nil && req.PrevLogIndex > latestBlk.Index) {
+	if req.Term < n.currentTerm {
 		return AppendEntriesResponse{
 			Term:    n.currentTerm,
 			Success: false,
 		}
 	}
+
 	if req.Term > n.currentTerm {
 		n.currentTerm = req.Term
 		n.votedFor = -1
 	}
 	n.state = Follower
 	n.leaderID = req.LeaderID
+	select {
+	case n.resetElectionTimerCh <- struct{}{}:
+	default:
+	}
+
+	if req.Entries == nil {
+		return AppendEntriesResponse{
+			Term:    n.currentTerm,
+			Success: true,
+		}
+	}
+
+	latestBlk, notEmpty := n.store.Latest()
+	if notEmpty {
+		if req.PrevLogIndex > latestBlk.Index {
+			return AppendEntriesResponse{
+				Term:    n.currentTerm,
+				Success: false,
+			}
+		}
+
+		blk, ok := n.store.Get(req.PrevLogIndex)
+		if !ok || req.PrevLogTerm != blk.Term {
+			return AppendEntriesResponse{
+				Term:    n.currentTerm,
+				Success: false,
+			}
+		}
+	} else if req.PrevLogIndex > 0 {
+		return AppendEntriesResponse{
+			Term:    n.currentTerm,
+			Success: false,
+		}
+	}
 
 	for _, blk := range req.Entries {
 		if err := n.store.Append(blk); err != nil {
@@ -74,10 +112,6 @@ func (n *Node) HandleAppendEntries(req AppendEntriesRequest) AppendEntriesRespon
 				Success: false,
 			}
 		}
-	}
-	select {
-	case n.resetElectionTimerCh <- struct{}{}:
-	default:
 	}
 	return AppendEntriesResponse{
 		Term:    n.currentTerm,

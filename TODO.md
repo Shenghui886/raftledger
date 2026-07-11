@@ -6,6 +6,7 @@
 - [ ] `LeaderCommit` + `commitIndex`，follower 按需应用已提交日志
 - [ ] `HandleRequestVote` 拒绝时也重置选举超时
 - [ ] 日志冲突时 follower 删除冲突 entry 及其后续（当前只能 append）
+- [ ] 将 store 的索引从 0-indexed 改为 1-indexed，消除 `PrevLogIndex=0` 的哨兵歧义
 - [ ] 选举时 leader 发空 `AppendEntries` 建立权威（当前在 `startElection` 结尾已有）
 
 ## 持久化

@@ -26,6 +26,7 @@ type AppendEntriesRequest struct {
 	Term         uint64
 	LeaderID     int
 	PrevLogIndex uint64
+	PrevLogTerm  uint64
 	Entries      []storage.Block
 	LeaderCommit uint64
 }
