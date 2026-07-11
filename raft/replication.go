@@ -100,10 +100,9 @@ func (n *Node) handleLogReplication(req AppendEntriesRequest) AppendEntriesRespo
 		return n.rejectResp()
 	}
 
+	n.store.Truncate(req.PrevLogIndex + 1)
 	for _, blk := range req.Entries {
-		if err := n.store.Append(blk); err != nil {
-			return n.rejectResp()
-		}
+		n.store.Append(blk)
 	}
 	if req.LeaderCommit > n.commitIndex {
 		n.setCommitIndex(min(req.LeaderCommit, req.PrevLogIndex+uint64(len(req.Entries))))

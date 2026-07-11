@@ -23,6 +23,15 @@ func (ls *LedgerStore) Append(block Block) error {
 	return nil
 }
 
+func (ls *LedgerStore) Truncate(from uint64) error {
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+	if from < uint64(len(ls.blocks)) {
+		ls.blocks = ls.blocks[:from]
+	}
+	return nil
+}
+
 func (ls *LedgerStore) Get(index uint64) (Block, bool) {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
