@@ -133,25 +133,39 @@ func (n *Node) Propose(data []byte) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
+	if n.state != Leader {
+		if n.leaderID != -1 {
+			return fmt.Errorf("Not leader, leader is %d", n.leaderID)
+		}
+		return fmt.Errorf("Not leader, unknown leader.")
+	}
 	blk := storage.Block{
 		Index:     n.store.Length(),
 		Term:      n.currentTerm,
 		Timestamp: uint64(time.Now().UnixMilli()),
 		Data:      storage.Transaction{Data: data},
 	}
-
-	if n.state == Leader {
-		return n.store.Append(blk)
-	}
-	if n.leaderID != -1 {
-		return fmt.Errorf("Not leader, leader is %d", n.leaderID)
-	}
-
-	return fmt.Errorf("Not leader, unknown leader.")
+	return n.store.Append(blk)
 }
 
 func (n *Node) ID() int {
 	return n.id
+}
+
+func (n *Node) rejectResp() AppendEntriesResponse {
+	return AppendEntriesResponse{Term: n.currentTerm, Success: false}
+}
+
+func (n *Node) successResp() AppendEntriesResponse {
+	return AppendEntriesResponse{Term: n.currentTerm, Success: true}
+}
+
+func (n *Node) rejectVoteResp() RequestVoteResponse {
+	return RequestVoteResponse{Term: n.currentTerm, VoteGranted: false}
+}
+
+func (n *Node) grantVoteResp() RequestVoteResponse {
+	return RequestVoteResponse{Term: n.currentTerm, VoteGranted: true}
 }
 
 func (n *Node) tryCommitByMajority() {
@@ -159,11 +173,11 @@ func (n *Node) tryCommitByMajority() {
 	for _, m := range n.matchIndex {
 		matched = append(matched, m)
 	}
-	if latestBlk, ok := n.store.Latest(); ok {
-		matched = append(matched, latestBlk.Index)
-	} else {
+	latestBlk, ok := n.store.Latest()
+	if !ok {
 		return
 	}
+	matched = append(matched, latestBlk.Index)
 	slices.Sort(matched)
 	majorityIdx := matched[len(matched)/2]
 	if majorityIdx > n.commitIndex {

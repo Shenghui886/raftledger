@@ -71,25 +71,16 @@ func (n *Node) HandleRequestVote(req RequestVoteRequest) RequestVoteResponse {
 	blk, _ := n.store.Latest()
 	if req.Term < n.currentTerm ||
 		(n.votedFor != -1 && n.votedFor != req.CandidateID) {
-		return RequestVoteResponse{
-			Term:        n.currentTerm,
-			VoteGranted: false,
-		}
+		return n.rejectVoteResp()
 	}
 	if req.LastLogTerm < blk.Term ||
 		(req.LastLogTerm == blk.Term && req.LastLogIndex < blk.Index) {
 		n.currentTerm = req.Term
-		return RequestVoteResponse{
-			Term:        n.currentTerm,
-			VoteGranted: false,
-		}
+		return n.rejectVoteResp()
 	}
 	n.currentTerm = req.Term
 	n.votedFor = req.CandidateID
 	n.state = Follower
 	trySend(n.resetElectionTimerCh, struct{}{})
-	return RequestVoteResponse{
-		Term:        n.currentTerm,
-		VoteGranted: true,
-	}
+	return n.grantVoteResp()
 }
