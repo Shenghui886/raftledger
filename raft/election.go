@@ -45,6 +45,7 @@ func (n *Node) startElection() {
 		n.state = Leader
 		n.leaderID = n.id
 		term := n.currentTerm
+		leaderCommit := n.commitIndex
 
 		blk, ok := n.store.Latest()
 		var baseIdx uint64 = 0
@@ -54,10 +55,11 @@ func (n *Node) startElection() {
 
 		for _, p := range n.peers {
 			n.nextIndex[p] = baseIdx
+			n.matchIndex[p] = 0
 		}
 		n.mu.Unlock()
 
-		n.sendHeartbeat(term)
+		n.sendHeartbeat(term, leaderCommit)
 		n.heartbeatTimer.Reset(n.heartbeatInterval)
 	}
 }
@@ -85,10 +87,7 @@ func (n *Node) HandleRequestVote(req RequestVoteRequest) RequestVoteResponse {
 	n.currentTerm = req.Term
 	n.votedFor = req.CandidateID
 	n.state = Follower
-	select {
-	case n.resetElectionTimerCh <- struct{}{}:
-	default:
-	}
+	trySend(n.resetElectionTimerCh, struct{}{})
 	return RequestVoteResponse{
 		Term:        n.currentTerm,
 		VoteGranted: true,

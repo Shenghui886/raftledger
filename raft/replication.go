@@ -6,7 +6,7 @@ import (
 	"github.com/Shenghui886/raftledger/storage"
 )
 
-func (n *Node) sendHeartbeat(term uint64) {
+func (n *Node) sendHeartbeat(term, leaderCommit uint64) {
 	for _, peer := range n.peers {
 		from := n.nextIndex[peer]
 		go func(p int, from uint64) {
@@ -36,7 +36,7 @@ func (n *Node) sendHeartbeat(term uint64) {
 				PrevLogIndex: prevLogIndex,
 				PrevLogTerm:  prevLogTerm,
 				Entries:      entries,
-				LeaderCommit: 0,
+				LeaderCommit: leaderCommit,
 			}
 			res, err := n.transport.AppendEntries(ctx, p, req)
 			var count uint64 = 0
@@ -44,10 +44,7 @@ func (n *Node) sendHeartbeat(term uint64) {
 				if err == nil && res.Success {
 					count = uint64(len(entries))
 				}
-				select {
-				case n.syncResultCh <- syncResult{id: p, count: count}:
-				default:
-				}
+				trySend(n.syncResultCh, syncResult{id: p, count: count})
 			}
 		}(peer, from)
 	}
@@ -70,12 +67,16 @@ func (n *Node) HandleAppendEntries(req AppendEntriesRequest) AppendEntriesRespon
 	}
 	n.state = Follower
 	n.leaderID = req.LeaderID
-	select {
-	case n.resetElectionTimerCh <- struct{}{}:
-	default:
-	}
+	trySend(n.resetElectionTimerCh, struct{}{})
 
 	if req.Entries == nil {
+		if req.LeaderCommit > n.commitIndex {
+			var lastIdx uint64
+			if latestBlk, ok := n.store.Latest(); ok {
+				lastIdx = latestBlk.Index
+			}
+			n.setCommitIndex(min(req.LeaderCommit, lastIdx))
+		}
 		return AppendEntriesResponse{
 			Term:    n.currentTerm,
 			Success: true,
@@ -112,6 +113,9 @@ func (n *Node) HandleAppendEntries(req AppendEntriesRequest) AppendEntriesRespon
 				Success: false,
 			}
 		}
+	}
+	if req.LeaderCommit > n.commitIndex {
+		n.setCommitIndex(min(req.LeaderCommit, req.PrevLogIndex+uint64(len(req.Entries))))
 	}
 	return AppendEntriesResponse{
 		Term:    n.currentTerm,

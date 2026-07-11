@@ -3,6 +3,7 @@ package raft
 import (
 	"fmt"
 	"math/rand"
+	"slices"
 	"sync"
 	"time"
 
@@ -29,6 +30,10 @@ type Node struct {
 	peers        []int
 	nextIndex    map[int]uint64
 	syncResultCh chan syncResult
+	commitIndex  uint64
+	matchIndex   map[int]uint64
+	lastApplied  uint64
+	applyCh      chan struct{}
 
 	electionTimer        *time.Timer
 	heartbeatTimer       *time.Timer
@@ -59,6 +64,10 @@ func NewNode(id int, store *storage.LedgerStore, transport Transport, peers []in
 		peers:        peers,
 		nextIndex:    make(map[int]uint64),
 		syncResultCh: make(chan syncResult, len(peers)),
+		commitIndex:  0,
+		matchIndex:   make(map[int]uint64),
+		lastApplied:  0,
+		applyCh:      make(chan struct{}, 1),
 
 		electionTimer:        &time.Timer{},
 		heartbeatTimer:       &time.Timer{},
@@ -73,6 +82,7 @@ func (n *Node) Start() {
 	n.heartbeatTimer.Stop()
 	n.mu.Unlock()
 
+	go n.applyLoop()
 	go func() {
 		for {
 			select {
@@ -88,8 +98,9 @@ func (n *Node) Start() {
 				n.mu.Lock()
 				if n.state == Leader {
 					term := n.currentTerm
+					leaderCommit := n.commitIndex
 					n.mu.Unlock()
-					n.sendHeartbeat(term)
+					n.sendHeartbeat(term, leaderCommit)
 					n.heartbeatTimer.Reset(n.heartbeatInterval)
 				} else {
 					n.mu.Unlock()
@@ -102,13 +113,17 @@ func (n *Node) Start() {
 					n.electionTimer.Reset(n.electionTimeout)
 				}
 			case r := <-n.syncResultCh:
+				n.mu.Lock()
 				if r.count > 0 {
 					n.nextIndex[r.id] += r.count
+					n.matchIndex[r.id] = n.nextIndex[r.id] - 1
+					n.tryCommitByMajority()
 				} else {
 					if n.nextIndex[r.id] > 0 {
 						n.nextIndex[r.id]--
 					}
 				}
+				n.mu.Unlock()
 			}
 		}
 	}()
@@ -137,4 +152,50 @@ func (n *Node) Propose(data []byte) error {
 
 func (n *Node) ID() int {
 	return n.id
+}
+
+func (n *Node) tryCommitByMajority() {
+	matched := make([]uint64, 0, len(n.peers)+1)
+	for _, m := range n.matchIndex {
+		matched = append(matched, m)
+	}
+	if latestBlk, ok := n.store.Latest(); ok {
+		matched = append(matched, latestBlk.Index)
+	} else {
+		return
+	}
+	slices.Sort(matched)
+	majorityIdx := matched[len(matched)/2]
+	if majorityIdx > n.commitIndex {
+		if blk, ok := n.store.Get(majorityIdx); ok && blk.Term == n.currentTerm {
+			n.setCommitIndex(majorityIdx)
+		}
+	}
+}
+
+func (n *Node) setCommitIndex(idx uint64) {
+	if idx > n.commitIndex {
+		n.commitIndex = idx
+		trySend(n.applyCh, struct{}{})
+	}
+}
+
+func (n *Node) applyLoop() {
+	for range n.applyCh {
+		n.mu.Lock()
+		for n.lastApplied < n.commitIndex {
+			blk, _ := n.store.Get(n.lastApplied)
+			// stateMachine.Apply(blk.Data)
+			_ = blk
+			n.lastApplied++
+		}
+		n.mu.Unlock()
+	}
+}
+
+func trySend[T any](ch chan<- T, val T) {
+	select {
+	case ch <- val:
+	default:
+	}
 }

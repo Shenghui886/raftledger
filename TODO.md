@@ -2,8 +2,8 @@
 
 ## Raft 协议规范
 
-- [ ] AppendEntries 增加 `PrevLogTerm` 字段，follower 检测 term 冲突
-- [ ] `LeaderCommit` + `commitIndex`，follower 按需应用已提交日志
+- [x] AppendEntries 增加 `PrevLogTerm` 字段，follower 检测 term 冲突
+- [x] `LeaderCommit` + `commitIndex`，follower 按需应用已提交日志
 - [ ] `HandleRequestVote` 拒绝时也重置选举超时
 - [ ] 日志冲突时 follower 删除冲突 entry 及其后续（当前只能 append）
 - [ ] 将 store 的索引从 0-indexed 改为 1-indexed，消除 `PrevLogIndex=0` 的哨兵歧义
