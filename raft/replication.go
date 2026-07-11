@@ -6,7 +6,7 @@ import (
 	"github.com/Shenghui886/raftledger/storage"
 )
 
-func (n *Node) sendHeartbeat(term, leaderCommit uint64) {
+func (n *Node) sendAppendEntries(term, leaderCommit uint64) {
 	for _, peer := range n.peers {
 		from := n.nextIndex[peer]
 		go func(p int, from uint64) {
@@ -15,13 +15,12 @@ func (n *Node) sendHeartbeat(term, leaderCommit uint64) {
 
 			req := n.buildAppendEntriesReq(from, term, leaderCommit)
 			res, err := n.transport.AppendEntries(ctx, p, req)
-			var count uint64 = 0
-			if req.Entries != nil {
-				if err == nil && res.Success {
-					count = uint64(len(req.Entries))
-				}
-				trySend(n.syncResultCh, syncResult{id: p, count: count})
-			}
+
+			trySend(n.syncResultCh, syncResult{
+				id:      p,
+				count:   uint64(len(req.Entries)),
+				success: err == nil && res.Success,
+			})
 		}(peer, from)
 	}
 }
@@ -37,7 +36,7 @@ func (n *Node) buildAppendEntriesReq(from, term, leaderCommit uint64) AppendEntr
 
 	var entries []storage.Block
 	latestBlk, ok := n.store.Latest()
-	if ok && from <= latestBlk.Index {
+	if ok && from > 0 && from <= latestBlk.Index {
 		for i := from; i <= latestBlk.Index; i++ {
 			blk, _ := n.store.Get(i)
 			entries = append(entries, blk)
@@ -93,8 +92,10 @@ func (n *Node) handleLogReplication(req AppendEntriesRequest) AppendEntriesRespo
 		if req.PrevLogIndex > latestBlk.Index {
 			return n.rejectResp()
 		}
-		if blk, ok := n.store.Get(req.PrevLogIndex); !ok || req.PrevLogTerm != blk.Term {
-			return n.rejectResp()
+		if req.PrevLogIndex > 0 {
+			if blk, ok := n.store.Get(req.PrevLogIndex); !ok || req.PrevLogTerm != blk.Term {
+				return n.rejectResp()
+			}
 		}
 	} else if req.PrevLogIndex > 0 {
 		return n.rejectResp()

@@ -99,7 +99,7 @@ All tests PASS
 ## Architecture
 
 ```txt
-Client ──Propose()──► Leader ──sendHeartbeat()──► Followers
+Client ──Propose()──► Leader ──sendAppendEntries()──► Followers
                          │
                     store.Append(block)     store.Append(block)
 ```

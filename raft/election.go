@@ -48,7 +48,7 @@ func (n *Node) startElection() {
 		leaderCommit := n.commitIndex
 
 		blk, ok := n.store.Latest()
-		var baseIdx uint64 = 0
+		var baseIdx uint64 = 1
 		if ok {
 			baseIdx = blk.Index + 1
 		}
@@ -59,7 +59,7 @@ func (n *Node) startElection() {
 		}
 		n.mu.Unlock()
 
-		n.sendHeartbeat(term, leaderCommit)
+		n.sendAppendEntries(term, leaderCommit)
 		n.heartbeatTimer.Reset(n.heartbeatInterval)
 	}
 }

@@ -41,8 +41,9 @@ type Node struct {
 }
 
 type syncResult struct {
-	id    int
-	count uint64
+	id      int
+	count   uint64
+	success bool
 }
 
 func NewNode(id int, store *storage.LedgerStore, transport Transport, peers []int) *Node {
@@ -100,7 +101,7 @@ func (n *Node) Start() {
 					term := n.currentTerm
 					leaderCommit := n.commitIndex
 					n.mu.Unlock()
-					n.sendHeartbeat(term, leaderCommit)
+					n.sendAppendEntries(term, leaderCommit)
 					n.heartbeatTimer.Reset(n.heartbeatInterval)
 				} else {
 					n.mu.Unlock()
@@ -114,11 +115,11 @@ func (n *Node) Start() {
 				}
 			case r := <-n.syncResultCh:
 				n.mu.Lock()
-				if r.count > 0 {
+				if r.count > 0 && r.success {
 					n.nextIndex[r.id] += r.count
 					n.matchIndex[r.id] = n.nextIndex[r.id] - 1
 					n.tryCommitByMajority()
-				} else {
+				} else if !r.success {
 					if n.nextIndex[r.id] > 0 {
 						n.nextIndex[r.id]--
 					}
@@ -140,7 +141,7 @@ func (n *Node) Propose(data []byte) error {
 		return fmt.Errorf("Not leader, unknown leader.")
 	}
 	blk := storage.Block{
-		Index:     n.store.Length(),
+		Index:     n.store.Length() + 1,
 		Term:      n.currentTerm,
 		Timestamp: uint64(time.Now().UnixMilli()),
 		Data:      storage.Transaction{Data: data},
@@ -198,10 +199,10 @@ func (n *Node) applyLoop() {
 	for range n.applyCh {
 		n.mu.Lock()
 		for n.lastApplied < n.commitIndex {
+			n.lastApplied++
 			blk, _ := n.store.Get(n.lastApplied)
 			// stateMachine.Apply(blk.Data)
 			_ = blk
-			n.lastApplied++
 		}
 		n.mu.Unlock()
 	}

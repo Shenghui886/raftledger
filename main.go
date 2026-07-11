@@ -58,7 +58,7 @@ func testConsistency(stores []*storage.LedgerStore, leaderID int) bool {
 			allMatch = false
 			continue
 		}
-		for j := uint64(0); j < s.Length(); j++ {
+		for j := uint64(1); j <= s.Length(); j++ {
 			leaderBlk, _ := leaderStore.Get(j)
 			followerBlk, _ := s.Get(j)
 			if leaderBlk.Term != followerBlk.Term ||
@@ -78,7 +78,7 @@ func testConsistency(stores []*storage.LedgerStore, leaderID int) bool {
 func printSummary(stores []*storage.LedgerStore) {
 	for i, s := range stores {
 		fmt.Printf("   Node %d: %d blocks\n", i, s.Length())
-		for j := uint64(0); j < s.Length(); j++ {
+		for j := uint64(1); j <= s.Length(); j++ {
 			blk, _ := s.Get(j)
 			fmt.Printf("     [%d] Term=%d  Data=%s\n", blk.Index, blk.Term, blk.Data.Data)
 		}
