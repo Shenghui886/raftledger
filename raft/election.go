@@ -29,6 +29,7 @@ func (n *Node) winElection() (term uint64, leaderCommit uint64) {
 func (n *Node) startElection() {
 	n.mu.Lock()
 	term, lastIdx, lastTerm := n.prepElection()
+	n.PersisNow(term, n.votedFor)
 	n.mu.Unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), n.electionTimeout/2)
@@ -74,17 +75,24 @@ func (n *Node) HandleRequestVote(req RequestVoteRequest) RequestVoteResponse {
 	defer trySend(n.resetElectionTimerCh, struct{}{})
 
 	if req.Term < n.currentTerm {
-		return n.rejectVoteResp()
+		return n.rejectVoteResp(n.currentTerm)
 	}
-	n.currentTerm = req.Term
+
+	if req.Term > n.currentTerm {
+		n.currentTerm = req.Term
+		n.votedFor = -1
+		n.state = Follower
+	}
 
 	blk, _ := n.store.Get(n.store.LatestIndex())
 	if (n.votedFor != -1 && n.votedFor != req.CandidateID) ||
 		req.LastLogTerm < blk.Term ||
 		(req.LastLogTerm == blk.Term && req.LastLogIndex < blk.Index) {
-		return n.rejectVoteResp()
+		n.PersisNow(req.Term, n.votedFor)
+		return n.rejectVoteResp(n.currentTerm)
 	}
 	n.votedFor = req.CandidateID
 	n.state = Follower
-	return n.grantVoteResp()
+	n.PersisNow(req.Term, n.votedFor)
+	return n.grantVoteResp(n.currentTerm)
 }

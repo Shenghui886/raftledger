@@ -2,7 +2,7 @@ package raft
 
 import "context"
 
-type Transport interface {
+type Transporter interface {
 	RequestVote(ctx context.Context, peer int, req RequestVoteRequest) (RequestVoteResponse, error)
 	AppendEntries(ctx context.Context, peer int, req AppendEntriesRequest) (AppendEntriesResponse, error)
 }

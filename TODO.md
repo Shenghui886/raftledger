@@ -11,8 +11,8 @@
 
 ## 持久化
 
-- [ ] `storage` 层支持从磁盘读写（当前纯内存）
-- [ ] 节点重启后恢复 `currentTerm`、`votedFor`、日志
+- [x] `storage` 层支持从磁盘读写（当前纯内存）
+- [x] 节点重启后恢复 `currentTerm`、`votedFor`、日志
 
 ## 网络传输
 

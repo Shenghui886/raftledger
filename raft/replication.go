@@ -7,6 +7,10 @@ import (
 )
 
 func (n *Node) sendAppendEntries(term, leaderCommit uint64) {
+	n.mu.RLock()
+	n.PersisNow(term, n.votedFor)
+	n.mu.RUnlock()
+
 	for _, peer := range n.peers {
 		from := n.nextIndex[peer]
 		go func(p int, from uint64) {
@@ -58,12 +62,13 @@ func (n *Node) HandleAppendEntries(req AppendEntriesRequest) AppendEntriesRespon
 	defer n.mu.Unlock()
 
 	if req.Term < n.currentTerm {
-		return n.rejectResp()
+		return n.rejectResp(n.currentTerm)
 	}
 
 	if req.Term > n.currentTerm {
 		n.currentTerm = req.Term
 		n.votedFor = -1
+		n.PersisNow(req.Term, n.votedFor)
 	}
 	n.state = Follower
 	n.leaderID = req.LeaderID
@@ -72,7 +77,10 @@ func (n *Node) HandleAppendEntries(req AppendEntriesRequest) AppendEntriesRespon
 	if req.Entries == nil {
 		return n.handleHeartbeat(req)
 	}
-	return n.handleLogReplication(req)
+
+	res := n.handleLogReplication(req)
+	n.PersisNow(req.Term, n.votedFor)
+	return res
 }
 
 func (n *Node) handleHeartbeat(req AppendEntriesRequest) AppendEntriesResponse {
@@ -80,22 +88,22 @@ func (n *Node) handleHeartbeat(req AppendEntriesRequest) AppendEntriesResponse {
 		lastIdx := n.store.LatestIndex()
 		n.setCommitIndex(min(req.LeaderCommit, lastIdx))
 	}
-	return n.successResp()
+	return n.successResp(n.currentTerm)
 }
 
 func (n *Node) handleLogReplication(req AppendEntriesRequest) AppendEntriesResponse {
 	latestIdx := n.store.LatestIndex()
 	if latestIdx > 0 {
 		if req.PrevLogIndex > latestIdx {
-			return n.rejectResp()
+			return n.rejectResp(n.currentTerm)
 		}
 		if req.PrevLogIndex > 0 {
 			if blk, ok := n.store.Get(req.PrevLogIndex); !ok || req.PrevLogTerm != blk.Term {
-				return n.rejectResp()
+				return n.rejectResp(n.currentTerm)
 			}
 		}
 	} else if req.PrevLogIndex > 0 {
-		return n.rejectResp()
+		return n.rejectResp(n.currentTerm)
 	}
 
 	n.store.Truncate(req.PrevLogIndex + 1)
@@ -105,5 +113,5 @@ func (n *Node) handleLogReplication(req AppendEntriesRequest) AppendEntriesRespo
 	if req.LeaderCommit > n.commitIndex {
 		n.setCommitIndex(min(req.LeaderCommit, req.PrevLogIndex+uint64(len(req.Entries))))
 	}
-	return n.successResp()
+	return n.successResp(n.currentTerm)
 }

@@ -18,11 +18,13 @@ type Node struct {
 	votedFor int
 	leaderID int
 
-	store *storage.LedgerStore
+	store     *storage.LedgerStore
+	persister storage.Persister
+
 	state NodeState
 	id    int
 
-	transport Transport
+	transport Transporter
 
 	electionTimeout   time.Duration
 	heartbeatInterval time.Duration
@@ -46,14 +48,16 @@ type syncResult struct {
 	success bool
 }
 
-func NewNode(id int, store *storage.LedgerStore, transport Transport, peers []int) *Node {
+func NewNode(id int, store *storage.LedgerStore, persister storage.Persister, transport Transporter, peers []int) *Node {
 	return &Node{
 		currentTerm: 0,
 
 		leaderID: -1,
 		votedFor: -1,
 
-		store: store,
+		store:     store,
+		persister: persister,
+
 		state: Follower,
 		id:    id,
 
@@ -77,7 +81,16 @@ func NewNode(id int, store *storage.LedgerStore, transport Transport, peers []in
 }
 
 func (n *Node) Start() {
+	state, err := n.persister.Load()
+	if err != nil {
+		panic(err)
+	}
+
 	n.mu.Lock()
+	n.store.Restore(state.Blocks)
+	n.currentTerm = state.CurrentTerm
+	n.votedFor = state.VotedFor
+
 	n.electionTimer = time.NewTimer(n.electionTimeout)
 	n.heartbeatTimer = time.NewTimer(n.heartbeatInterval)
 	n.heartbeatTimer.Stop()
@@ -103,27 +116,28 @@ func (n *Node) Propose(data []byte) error {
 		Timestamp: uint64(time.Now().UnixMilli()),
 		Data:      storage.Transaction{Data: data},
 	}
-	return n.store.Append(blk)
+	n.store.Append(blk)
+	return nil
 }
 
 func (n *Node) ID() int {
 	return n.id
 }
 
-func (n *Node) rejectResp() AppendEntriesResponse {
-	return AppendEntriesResponse{Term: n.currentTerm, Success: false}
+func (n *Node) rejectResp(term uint64) AppendEntriesResponse {
+	return AppendEntriesResponse{Term: term, Success: false}
 }
 
-func (n *Node) successResp() AppendEntriesResponse {
-	return AppendEntriesResponse{Term: n.currentTerm, Success: true}
+func (n *Node) successResp(term uint64) AppendEntriesResponse {
+	return AppendEntriesResponse{Term: term, Success: true}
 }
 
-func (n *Node) rejectVoteResp() RequestVoteResponse {
-	return RequestVoteResponse{Term: n.currentTerm, VoteGranted: false}
+func (n *Node) rejectVoteResp(term uint64) RequestVoteResponse {
+	return RequestVoteResponse{Term: term, VoteGranted: false}
 }
 
-func (n *Node) grantVoteResp() RequestVoteResponse {
-	return RequestVoteResponse{Term: n.currentTerm, VoteGranted: true}
+func (n *Node) grantVoteResp(term uint64) RequestVoteResponse {
+	return RequestVoteResponse{Term: term, VoteGranted: true}
 }
 
 func (n *Node) tryCommitByMajority() {
@@ -207,6 +221,17 @@ func (n *Node) eventLoop() {
 			}
 			n.mu.Unlock()
 		}
+	}
+}
+
+func (n *Node) PersisNow(term uint64, vote int) {
+	blocks := n.store.SnapshotBlocks()
+	if err := n.persister.Save(storage.PersistedState{
+		CurrentTerm: term,
+		VotedFor:    vote,
+		Blocks:      blocks,
+	}); err != nil {
+		panic(err)
 	}
 }
 

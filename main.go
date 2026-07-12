@@ -7,6 +7,7 @@ import (
 	"github.com/Shenghui886/raftledger/raft"
 	"github.com/Shenghui886/raftledger/raft/memtransport"
 	"github.com/Shenghui886/raftledger/storage"
+	"github.com/Shenghui886/raftledger/storage/filepersister"
 )
 
 func waitElection(nodes []*raft.Node) *raft.Node {
@@ -91,11 +92,15 @@ func main() {
 	store1 := storage.NewLedgerStore()
 	store2 := storage.NewLedgerStore()
 
+	p0 := filepersister.New("node0.json")
+	p1 := filepersister.New("node1.json")
+	p2 := filepersister.New("node2.json")
+
 	transport := memtransport.NewMemoryTransport()
 
-	node0 := raft.NewNode(0, store0, transport, []int{1, 2})
-	node1 := raft.NewNode(1, store1, transport, []int{0, 2})
-	node2 := raft.NewNode(2, store2, transport, []int{0, 1})
+	node0 := raft.NewNode(0, store0, p0, transport, []int{1, 2})
+	node1 := raft.NewNode(1, store1, p1, transport, []int{0, 2})
+	node2 := raft.NewNode(2, store2, p2, transport, []int{0, 1})
 
 	transport.Register(node0)
 	transport.Register(node1)

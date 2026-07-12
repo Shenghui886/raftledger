@@ -1,0 +1,8 @@
+# 编译产物
+raftledger
+
+# IDE
+.vscode/
+.idea/
+*.swp
+node*.json

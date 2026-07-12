@@ -51,3 +51,19 @@ func (ls *LedgerStore) LatestIndex() uint64 {
 		return ls.blocks[l-1].Index
 	}
 }
+
+func (ls *LedgerStore) SnapshotBlocks() []Block {
+	ls.mu.RLock()
+	defer ls.mu.RUnlock()
+
+	blocks := make([]Block, len(ls.blocks))
+	copy(blocks, ls.blocks)
+
+	return blocks
+}
+
+func (ls *LedgerStore) Restore(blocks []Block) {
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+	ls.blocks = blocks
+}
