@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Shenghui886/raftledger/raft"
+	"github.com/Shenghui886/raftledger/raft/memtransport"
 	"github.com/Shenghui886/raftledger/storage"
 )
 
@@ -90,7 +91,7 @@ func main() {
 	store1 := storage.NewLedgerStore()
 	store2 := storage.NewLedgerStore()
 
-	transport := raft.NewMemoryTransport()
+	transport := memtransport.NewMemoryTransport()
 
 	node0 := raft.NewNode(0, store0, transport, []int{1, 2})
 	node1 := raft.NewNode(1, store1, transport, []int{0, 2})
