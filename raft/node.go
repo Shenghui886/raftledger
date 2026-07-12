@@ -84,50 +84,7 @@ func (n *Node) Start() {
 	n.mu.Unlock()
 
 	go n.applyLoop()
-	go func() {
-		for {
-			select {
-			case <-n.electionTimer.C:
-				n.mu.Lock()
-				if n.state != Leader {
-					n.mu.Unlock()
-					n.startElection()
-				} else {
-					n.mu.Unlock()
-				}
-			case <-n.heartbeatTimer.C:
-				n.mu.Lock()
-				if n.state == Leader {
-					term := n.currentTerm
-					leaderCommit := n.commitIndex
-					n.mu.Unlock()
-					n.sendAppendEntries(term, leaderCommit)
-					n.heartbeatTimer.Reset(n.heartbeatInterval)
-				} else {
-					n.mu.Unlock()
-				}
-			case <-n.resetElectionTimerCh:
-				n.mu.RLock()
-				isFollower := n.state != Leader
-				n.mu.RUnlock()
-				if isFollower {
-					n.electionTimer.Reset(n.electionTimeout)
-				}
-			case r := <-n.syncResultCh:
-				n.mu.Lock()
-				if r.count > 0 && r.success {
-					n.nextIndex[r.id] += r.count
-					n.matchIndex[r.id] = n.nextIndex[r.id] - 1
-					n.tryCommitByMajority()
-				} else if !r.success {
-					if n.nextIndex[r.id] > 0 {
-						n.nextIndex[r.id]--
-					}
-				}
-				n.mu.Unlock()
-			}
-		}
-	}()
+	go n.eventLoop()
 }
 
 func (n *Node) Propose(data []byte) error {
@@ -205,6 +162,51 @@ func (n *Node) applyLoop() {
 			_ = blk
 		}
 		n.mu.Unlock()
+	}
+}
+
+func (n *Node) eventLoop() {
+	for {
+		select {
+		case <-n.electionTimer.C:
+			n.mu.Lock()
+			if n.state != Leader {
+				n.mu.Unlock()
+				n.startElection()
+			} else {
+				n.mu.Unlock()
+			}
+		case <-n.heartbeatTimer.C:
+			n.mu.Lock()
+			if n.state == Leader {
+				term := n.currentTerm
+				leaderCommit := n.commitIndex
+				n.mu.Unlock()
+				n.sendAppendEntries(term, leaderCommit)
+				n.heartbeatTimer.Reset(n.heartbeatInterval)
+			} else {
+				n.mu.Unlock()
+			}
+		case <-n.resetElectionTimerCh:
+			n.mu.RLock()
+			isFollower := n.state != Leader
+			n.mu.RUnlock()
+			if isFollower {
+				n.electionTimer.Reset(n.electionTimeout)
+			}
+		case r := <-n.syncResultCh:
+			n.mu.Lock()
+			if r.count > 0 && r.success {
+				n.nextIndex[r.id] += r.count
+				n.matchIndex[r.id] = n.nextIndex[r.id] - 1
+				n.tryCommitByMajority()
+			} else if !r.success {
+				if n.nextIndex[r.id] > 0 {
+					n.nextIndex[r.id]--
+				}
+			}
+			n.mu.Unlock()
+		}
 	}
 }
 
