@@ -141,7 +141,7 @@ func (n *Node) Propose(data []byte) error {
 		return fmt.Errorf("Not leader, unknown leader.")
 	}
 	blk := storage.Block{
-		Index:     n.store.Length() + 1,
+		Index:     n.store.LatestIndex() + 1,
 		Term:      n.currentTerm,
 		Timestamp: uint64(time.Now().UnixMilli()),
 		Data:      storage.Transaction{Data: data},
@@ -174,11 +174,11 @@ func (n *Node) tryCommitByMajority() {
 	for _, m := range n.matchIndex {
 		matched = append(matched, m)
 	}
-	latestBlk, ok := n.store.Latest()
-	if !ok {
+	latestIdx := n.store.LatestIndex()
+	if latestIdx == 0 {
 		return
 	}
-	matched = append(matched, latestBlk.Index)
+	matched = append(matched, latestIdx)
 	slices.Sort(matched)
 	majorityIdx := matched[len(matched)/2]
 	if majorityIdx > n.commitIndex {

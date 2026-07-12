@@ -42,19 +42,12 @@ func (ls *LedgerStore) Get(index uint64) (Block, bool) {
 	return ls.blocks[index-1], true
 }
 
-func (ls *LedgerStore) Length() uint64 {
+func (ls *LedgerStore) LatestIndex() uint64 {
 	ls.mu.RLock()
 	defer ls.mu.RUnlock()
-
-	return uint64(len(ls.blocks))
-}
-
-func (ls *LedgerStore) Latest() (Block, bool) {
-	ls.mu.RLock()
-	defer ls.mu.RUnlock()
-
-	if len(ls.blocks) == 0 {
-		return Block{}, false
+	if l := len(ls.blocks); l == 0 {
+		return 0
+	} else {
+		return ls.blocks[l-1].Index
 	}
-	return ls.blocks[len(ls.blocks)-1], true
 }

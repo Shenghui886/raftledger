@@ -35,9 +35,9 @@ func (n *Node) buildAppendEntriesReq(from, term, leaderCommit uint64) AppendEntr
 	}
 
 	var entries []storage.Block
-	latestBlk, ok := n.store.Latest()
-	if ok && from > 0 && from <= latestBlk.Index {
-		for i := from; i <= latestBlk.Index; i++ {
+	latestIdx := n.store.LatestIndex()
+	if latestIdx > 0 && from > 0 && from <= latestIdx {
+		for i := from; i <= latestIdx; i++ {
 			blk, _ := n.store.Get(i)
 			entries = append(entries, blk)
 		}
@@ -77,19 +77,16 @@ func (n *Node) HandleAppendEntries(req AppendEntriesRequest) AppendEntriesRespon
 
 func (n *Node) handleHeartbeat(req AppendEntriesRequest) AppendEntriesResponse {
 	if req.LeaderCommit > n.commitIndex {
-		var lastIdx uint64
-		if latestBlk, ok := n.store.Latest(); ok {
-			lastIdx = latestBlk.Index
-		}
+		lastIdx := n.store.LatestIndex()
 		n.setCommitIndex(min(req.LeaderCommit, lastIdx))
 	}
 	return n.successResp()
 }
 
 func (n *Node) handleLogReplication(req AppendEntriesRequest) AppendEntriesResponse {
-	latestBlk, notEmpty := n.store.Latest()
-	if notEmpty {
-		if req.PrevLogIndex > latestBlk.Index {
+	latestIdx := n.store.LatestIndex()
+	if latestIdx > 0 {
+		if req.PrevLogIndex > latestIdx {
 			return n.rejectResp()
 		}
 		if req.PrevLogIndex > 0 {

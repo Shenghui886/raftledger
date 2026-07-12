@@ -11,7 +11,7 @@ func (n *Node) startElection() {
 	n.currentTerm++
 	n.state = Candidate
 	n.votedFor = n.id
-	latestBlk, _ := n.store.Latest()
+	latestBlk, _ := n.store.Get(n.store.LatestIndex())
 	n.mu.Unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), n.electionTimeout/2)
@@ -47,14 +47,8 @@ func (n *Node) startElection() {
 		term := n.currentTerm
 		leaderCommit := n.commitIndex
 
-		blk, ok := n.store.Latest()
-		var baseIdx uint64 = 1
-		if ok {
-			baseIdx = blk.Index + 1
-		}
-
 		for _, p := range n.peers {
-			n.nextIndex[p] = baseIdx
+			n.nextIndex[p] = n.store.LatestIndex() + 1
 			n.matchIndex[p] = 0
 		}
 		n.mu.Unlock()
@@ -75,7 +69,7 @@ func (n *Node) HandleRequestVote(req RequestVoteRequest) RequestVoteResponse {
 	}
 	n.currentTerm = req.Term
 
-	blk, _ := n.store.Latest()
+	blk, _ := n.store.Get(n.store.LatestIndex())
 	if (n.votedFor != -1 && n.votedFor != req.CandidateID) ||
 		req.LastLogTerm < blk.Term ||
 		(req.LastLogTerm == blk.Term && req.LastLogIndex < blk.Index) {
