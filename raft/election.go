@@ -33,7 +33,6 @@ func (n *Node) startElection() {
 	n.mu.Unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), n.electionTimeout/2)
-	defer cancel()
 
 	req := RequestVoteRequest{
 		Term:         term,
@@ -56,16 +55,15 @@ func (n *Node) startElection() {
 			}
 		}(peer)
 	}
-	wg.Wait()
 
-	if vote.Load() > int64((len(n.peers)+1)/2) {
-		n.mu.Lock()
-		term, leaderCommit := n.winElection()
-		n.mu.Unlock()
+	go func(electedTerm uint64) {
+		wg.Wait()
+		cancel()
 
-		n.sendAppendEntries(term, leaderCommit)
-		n.heartbeatTimer.Reset(n.heartbeatInterval)
-	}
+		if vote.Load() > int64((len(n.peers)+1)/2) {
+			trySend(n.winElectionCh, electedTerm)
+		}
+	}(term)
 }
 
 func (n *Node) HandleRequestVote(req RequestVoteRequest) RequestVoteResponse {

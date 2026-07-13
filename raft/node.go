@@ -39,6 +39,7 @@ type Node struct {
 
 	electionTimer        *time.Timer
 	heartbeatTimer       *time.Timer
+	winElectionCh        chan uint64
 	resetElectionTimerCh chan struct{}
 }
 
@@ -76,6 +77,7 @@ func NewNode(id int, store *storage.LedgerStore, persister storage.Persister, tr
 
 		electionTimer:        &time.Timer{},
 		heartbeatTimer:       &time.Timer{},
+		winElectionCh:        make(chan uint64, 1),
 		resetElectionTimerCh: make(chan struct{}, 1),
 	}
 }
@@ -220,6 +222,16 @@ func (n *Node) eventLoop() {
 				}
 			}
 			n.mu.Unlock()
+		case electedTerm := <-n.winElectionCh:
+			n.mu.Lock()
+			if n.state == Candidate && n.currentTerm == electedTerm {
+				term, leaderCommit := n.winElection()
+				n.mu.Unlock()
+				n.sendAppendEntries(term, leaderCommit)
+				n.heartbeatTimer.Reset(n.heartbeatInterval)
+			} else {
+				n.mu.Unlock()
+			}
 		}
 	}
 }
