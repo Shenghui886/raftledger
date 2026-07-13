@@ -224,7 +224,7 @@ func (n *Node) eventLoop() {
 	}
 }
 
-func (n *Node) PersisNow(term uint64, vote int) {
+func (n *Node) persisNow(term uint64, vote int) {
 	blocks := n.store.SnapshotBlocks()
 	if err := n.persister.Save(storage.PersistedState{
 		CurrentTerm: term,

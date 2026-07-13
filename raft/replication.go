@@ -8,7 +8,7 @@ import (
 
 func (n *Node) sendAppendEntries(term, leaderCommit uint64) {
 	n.mu.RLock()
-	n.PersisNow(term, n.votedFor)
+	n.persisNow(term, n.votedFor)
 	n.mu.RUnlock()
 
 	for _, peer := range n.peers {
@@ -60,6 +60,7 @@ func (n *Node) buildAppendEntriesReq(from, term, leaderCommit uint64) AppendEntr
 func (n *Node) HandleAppendEntries(req AppendEntriesRequest) AppendEntriesResponse {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	defer func() { n.persisNow(req.Term, n.votedFor) }()
 
 	if req.Term < n.currentTerm {
 		return n.rejectResp(n.currentTerm)
@@ -68,7 +69,6 @@ func (n *Node) HandleAppendEntries(req AppendEntriesRequest) AppendEntriesRespon
 	if req.Term > n.currentTerm {
 		n.currentTerm = req.Term
 		n.votedFor = -1
-		n.PersisNow(req.Term, n.votedFor)
 	}
 	n.state = Follower
 	n.leaderID = req.LeaderID
@@ -78,9 +78,7 @@ func (n *Node) HandleAppendEntries(req AppendEntriesRequest) AppendEntriesRespon
 		return n.handleHeartbeat(req)
 	}
 
-	res := n.handleLogReplication(req)
-	n.PersisNow(req.Term, n.votedFor)
-	return res
+	return n.handleLogReplication(req)
 }
 
 func (n *Node) handleHeartbeat(req AppendEntriesRequest) AppendEntriesResponse {
