@@ -12,7 +12,9 @@ func (n *Node) sendAppendEntries(term, leaderCommit uint64) {
 	n.mu.RUnlock()
 
 	for _, peer := range n.peers {
+		n.mu.RLock()
 		from := n.nextIndex[peer]
+		n.mu.RUnlock()
 		go func(p int, from uint64) {
 			ctx, cancel := context.WithTimeout(context.Background(), n.electionTimeout/2)
 			defer cancel()
@@ -74,6 +76,20 @@ func (n *Node) HandleAppendEntries(req AppendEntriesRequest) AppendEntriesRespon
 	n.leaderID = req.LeaderID
 	trySend(n.resetElectionTimerCh, struct{}{})
 
+	latestIdx := n.store.LatestIndex()
+	if latestIdx > 0 {
+		if req.PrevLogIndex > latestIdx {
+			return n.rejectResp(n.currentTerm)
+		}
+		if req.PrevLogIndex > 0 {
+			if blk, ok := n.store.Get(req.PrevLogIndex); !ok || req.PrevLogTerm != blk.Term {
+				return n.rejectResp(n.currentTerm)
+			}
+		}
+	} else if req.PrevLogIndex > 0 {
+		return n.rejectResp(n.currentTerm)
+	}
+
 	if req.Entries == nil {
 		return n.handleHeartbeat(req)
 	}
@@ -90,20 +106,6 @@ func (n *Node) handleHeartbeat(req AppendEntriesRequest) AppendEntriesResponse {
 }
 
 func (n *Node) handleLogReplication(req AppendEntriesRequest) AppendEntriesResponse {
-	latestIdx := n.store.LatestIndex()
-	if latestIdx > 0 {
-		if req.PrevLogIndex > latestIdx {
-			return n.rejectResp(n.currentTerm)
-		}
-		if req.PrevLogIndex > 0 {
-			if blk, ok := n.store.Get(req.PrevLogIndex); !ok || req.PrevLogTerm != blk.Term {
-				return n.rejectResp(n.currentTerm)
-			}
-		}
-	} else if req.PrevLogIndex > 0 {
-		return n.rejectResp(n.currentTerm)
-	}
-
 	n.store.Truncate(req.PrevLogIndex + 1)
 	for _, blk := range req.Entries {
 		n.store.Append(blk)

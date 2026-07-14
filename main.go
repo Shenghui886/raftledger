@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/Shenghui886/raftledger/raft"
-	"github.com/Shenghui886/raftledger/raft/memtransport"
+	"github.com/Shenghui886/raftledger/raft/tcptransport"
 	"github.com/Shenghui886/raftledger/storage"
 	"github.com/Shenghui886/raftledger/storage/filepersister"
 )
@@ -96,15 +96,25 @@ func main() {
 	p1 := filepersister.New("node1.json")
 	p2 := filepersister.New("node2.json")
 
-	transport := memtransport.NewMemoryTransport()
+	peerAddr := map[int]string{
+		0: ":9000",
+		1: ":9001",
+		2: ":9002",
+	}
 
-	node0 := raft.NewNode(0, store0, p0, transport, []int{1, 2})
-	node1 := raft.NewNode(1, store1, p1, transport, []int{0, 2})
-	node2 := raft.NewNode(2, store2, p2, transport, []int{0, 1})
+	t0 := tcptransport.New(peerAddr)
+	t1 := tcptransport.New(peerAddr)
+	t2 := tcptransport.New(peerAddr)
 
-	transport.Register(node0)
-	transport.Register(node1)
-	transport.Register(node2)
+	node0 := raft.NewNode(0, store0, p0, t0, []int{1, 2})
+	node1 := raft.NewNode(1, store1, p1, t1, []int{0, 2})
+	node2 := raft.NewNode(2, store2, p2, t2, []int{0, 1})
+
+	go tcptransport.ListenAndServe(":9000", node0)
+	go tcptransport.ListenAndServe(":9001", node1)
+	go tcptransport.ListenAndServe(":9002", node2)
+
+	time.Sleep(50 * time.Millisecond)
 
 	node0.Start()
 	node1.Start()
@@ -131,7 +141,7 @@ func main() {
 
 	fmt.Println()
 	fmt.Println("4. Cross-Node Consistency")
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(500 * time.Millisecond)
 	consistent := testConsistency(stores, leader.ID())
 
 	fmt.Println()

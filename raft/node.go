@@ -69,7 +69,7 @@ func NewNode(id int, store *storage.LedgerStore, persister storage.Persister, tr
 
 		peers:        peers,
 		nextIndex:    make(map[int]uint64),
-		syncResultCh: make(chan syncResult, len(peers)),
+		syncResultCh: make(chan syncResult, len(peers)*3),
 		commitIndex:  0,
 		matchIndex:   make(map[int]uint64),
 		lastApplied:  0,
@@ -170,14 +170,18 @@ func (n *Node) setCommitIndex(idx uint64) {
 
 func (n *Node) applyLoop() {
 	for range n.applyCh {
-		n.mu.Lock()
-		for n.lastApplied < n.commitIndex {
+		for {
+			n.mu.Lock()
+			if n.lastApplied >= n.commitIndex {
+				n.mu.Unlock()
+				break
+			}
 			n.lastApplied++
 			blk, _ := n.store.Get(n.lastApplied)
+			n.mu.Unlock()
 			// stateMachine.Apply(blk.Data)
 			_ = blk
 		}
-		n.mu.Unlock()
 	}
 }
 
@@ -217,7 +221,7 @@ func (n *Node) eventLoop() {
 				n.matchIndex[r.id] = n.nextIndex[r.id] - 1
 				n.tryCommitByMajority()
 			} else if !r.success {
-				if n.nextIndex[r.id] > 0 {
+				if n.nextIndex[r.id] > 1 {
 					n.nextIndex[r.id]--
 				}
 			}

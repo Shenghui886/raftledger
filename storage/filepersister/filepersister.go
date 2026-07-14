@@ -26,6 +26,15 @@ func (fp *FilePersister) Save(state storage.PersistedState) error {
 	if err := os.WriteFile(tmp, data, 0644); err != nil {
 		return err
 	}
+	f, err := os.OpenFile(tmp, os.O_WRONLY, 0)
+	if err != nil {
+		return err
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	f.Close()
 	return os.Rename(tmp, fp.filePath)
 }
 

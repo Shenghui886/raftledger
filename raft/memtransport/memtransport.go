@@ -13,17 +13,18 @@ type MemoryTransport struct {
 	nodes map[int]*raft.Node
 }
 
-func NewMemoryTransport() *MemoryTransport {
+func New() *MemoryTransport {
 	return &MemoryTransport{
 		nodes: make(map[int]*raft.Node),
 	}
 }
 
-func (mt *MemoryTransport) Register(node *raft.Node) {
+func (mt *MemoryTransport) Register(node *raft.Node) error {
 	mt.mu.Lock()
 	defer mt.mu.Unlock()
 
 	mt.nodes[node.ID()] = node
+	return nil
 }
 
 func (mt *MemoryTransport) RequestVote(ctx context.Context, peer int, req raft.RequestVoteRequest) (raft.RequestVoteResponse, error) {
