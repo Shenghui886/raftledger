@@ -6,3 +6,6 @@ raftledger
 .idea/
 *.swp
 node*.json
+
+# Tools
+tools/

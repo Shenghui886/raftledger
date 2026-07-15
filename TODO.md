@@ -16,7 +16,8 @@
 
 ## 网络传输
 
-- [ ] 实现 `Transport` 接口的 gRPC/TCP 版本（当前仅 `MemoryTransport`）
+- [x] 实现 `Transport` 接口的 TCP 版本
+- [x] 实现 `Transport` 接口的 gRPC版本
 
 ## 快照
 

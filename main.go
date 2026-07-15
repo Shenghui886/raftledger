@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/Shenghui886/raftledger/raft"
-	"github.com/Shenghui886/raftledger/raft/tcptransport"
+	"github.com/Shenghui886/raftledger/raft/grpctransport"
 	"github.com/Shenghui886/raftledger/storage"
 	"github.com/Shenghui886/raftledger/storage/filepersister"
 )
@@ -102,17 +102,17 @@ func main() {
 		2: ":9002",
 	}
 
-	t0 := tcptransport.New(peerAddr)
-	t1 := tcptransport.New(peerAddr)
-	t2 := tcptransport.New(peerAddr)
+	t0 := grpctransport.New(peerAddr)
+	t1 := grpctransport.New(peerAddr)
+	t2 := grpctransport.New(peerAddr)
 
 	node0 := raft.NewNode(0, store0, p0, t0, []int{1, 2})
 	node1 := raft.NewNode(1, store1, p1, t1, []int{0, 2})
 	node2 := raft.NewNode(2, store2, p2, t2, []int{0, 1})
 
-	go tcptransport.ListenAndServe(":9000", node0)
-	go tcptransport.ListenAndServe(":9001", node1)
-	go tcptransport.ListenAndServe(":9002", node2)
+	go grpctransport.ListenAndServe(":9000", node0)
+	go grpctransport.ListenAndServe(":9001", node1)
+	go grpctransport.ListenAndServe(":9002", node2)
 
 	time.Sleep(50 * time.Millisecond)
 
