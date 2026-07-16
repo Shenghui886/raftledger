@@ -13,7 +13,7 @@ import (
 	"github.com/Shenghui886/raftledger/raft"
 )
 
-type TCPTransport struct {
+type tCPTransport struct {
 	mu sync.RWMutex
 
 	peerAddr map[int]string
@@ -25,7 +25,7 @@ type peerConn struct {
 	conn net.Conn
 }
 
-type Envelope struct {
+type envelope struct {
 	Type string          `json:"type"`
 	Body json.RawMessage `json:"body"`
 }
@@ -39,14 +39,14 @@ const (
 	maxFrameSize = 10 * 1024 * 1024
 )
 
-func New(peerAddr map[int]string) *TCPTransport {
-	return &TCPTransport{
+func New(peerAddr map[int]string) raft.Transporter {
+	return &tCPTransport{
 		peerAddr: peerAddr,
 		conns:    make(map[int]*peerConn),
 	}
 }
 
-func (t *TCPTransport) getOrConnect(timeout time.Duration, peer int, addr string) (*peerConn, error) {
+func (t *tCPTransport) getOrConnect(timeout time.Duration, peer int, addr string) (*peerConn, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -62,7 +62,7 @@ func (t *TCPTransport) getOrConnect(timeout time.Duration, peer int, addr string
 	return t.conns[peer], nil
 }
 
-func (t *TCPTransport) evictConn(peer int) {
+func (t *tCPTransport) evictConn(peer int) {
 	t.mu.Lock()
 	if pc := t.conns[peer]; pc != nil {
 		pc.conn.Close()
@@ -71,7 +71,7 @@ func (t *TCPTransport) evictConn(peer int) {
 	t.mu.Unlock()
 }
 
-func writeFrame(ctx context.Context, conn net.Conn, req Envelope) error {
+func writeFrame(ctx context.Context, conn net.Conn, req envelope) error {
 	data, err := json.Marshal(req)
 	if err != nil {
 		return err
@@ -91,30 +91,30 @@ func writeFrame(ctx context.Context, conn net.Conn, req Envelope) error {
 	return nil
 }
 
-func readFrame(ctx context.Context, conn net.Conn) (Envelope, error) {
+func readFrame(ctx context.Context, conn net.Conn) (envelope, error) {
 	deadline, _ := ctx.Deadline()
 	conn.SetReadDeadline(deadline)
 
 	header := make([]byte, 4)
 	if _, err := io.ReadFull(conn, header); err != nil {
-		return Envelope{}, err
+		return envelope{}, err
 	}
 
 	length := binary.BigEndian.Uint32(header)
 	if length > maxFrameSize {
-		return Envelope{}, fmt.Errorf("frame too large: %d > %d", length, maxFrameSize)
+		return envelope{}, fmt.Errorf("frame too large: %d > %d", length, maxFrameSize)
 	}
 	data := make([]byte, length)
 
 	if _, err := io.ReadFull(conn, data); err != nil {
-		return Envelope{}, err
+		return envelope{}, err
 	}
-	var resp Envelope
+	var resp envelope
 	err := json.Unmarshal(data, &resp)
 	return resp, err
 }
 
-func (t *TCPTransport) RequestVote(ctx context.Context, peer int, req raft.RequestVoteRequest) (raft.RequestVoteResponse, error) {
+func (t *tCPTransport) RequestVote(ctx context.Context, peer int, req raft.RequestVoteRequest) (raft.RequestVoteResponse, error) {
 	if err := ctx.Err(); err != nil {
 		return raft.RequestVoteResponse{}, err
 	}
@@ -140,7 +140,7 @@ func (t *TCPTransport) RequestVote(ctx context.Context, peer int, req raft.Reque
 	if err != nil {
 		return raft.RequestVoteResponse{}, err
 	}
-	if err := writeFrame(ctx, pc.conn, Envelope{
+	if err := writeFrame(ctx, pc.conn, envelope{
 		Type: TypeRequestVote,
 		Body: rawReq,
 	}); err != nil {
@@ -161,7 +161,7 @@ func (t *TCPTransport) RequestVote(ctx context.Context, peer int, req raft.Reque
 	return resp, nil
 }
 
-func (t *TCPTransport) AppendEntries(ctx context.Context, peer int, req raft.AppendEntriesRequest) (raft.AppendEntriesResponse, error) {
+func (t *tCPTransport) AppendEntries(ctx context.Context, peer int, req raft.AppendEntriesRequest) (raft.AppendEntriesResponse, error) {
 	if err := ctx.Err(); err != nil {
 		return raft.AppendEntriesResponse{}, err
 	}
@@ -186,7 +186,7 @@ func (t *TCPTransport) AppendEntries(ctx context.Context, peer int, req raft.App
 	if err != nil {
 		return raft.AppendEntriesResponse{}, err
 	}
-	if err := writeFrame(ctx, pc.conn, Envelope{
+	if err := writeFrame(ctx, pc.conn, envelope{
 		Type: TypeAppendEntries,
 		Body: rawReq,
 	}); err != nil {

@@ -8,26 +8,18 @@ import (
 	"github.com/Shenghui886/raftledger/raft"
 )
 
-type MemoryTransport struct {
+type memoryTransport struct {
 	mu    sync.RWMutex
 	nodes map[int]*raft.Node
 }
 
-func New() *MemoryTransport {
-	return &MemoryTransport{
-		nodes: make(map[int]*raft.Node),
+func New(nodes map[int]*raft.Node) raft.Transporter {
+	return &memoryTransport{
+		nodes: nodes,
 	}
 }
 
-func (mt *MemoryTransport) Register(node *raft.Node) error {
-	mt.mu.Lock()
-	defer mt.mu.Unlock()
-
-	mt.nodes[node.ID()] = node
-	return nil
-}
-
-func (mt *MemoryTransport) RequestVote(ctx context.Context, peer int, req raft.RequestVoteRequest) (raft.RequestVoteResponse, error) {
+func (mt *memoryTransport) RequestVote(ctx context.Context, peer int, req raft.RequestVoteRequest) (raft.RequestVoteResponse, error) {
 	mt.mu.RLock()
 	defer mt.mu.RUnlock()
 	if err := ctx.Err(); err != nil {
@@ -43,7 +35,7 @@ func (mt *MemoryTransport) RequestVote(ctx context.Context, peer int, req raft.R
 	return resp, nil
 }
 
-func (mt *MemoryTransport) AppendEntries(ctx context.Context, peer int, req raft.AppendEntriesRequest) (raft.AppendEntriesResponse, error) {
+func (mt *memoryTransport) AppendEntries(ctx context.Context, peer int, req raft.AppendEntriesRequest) (raft.AppendEntriesResponse, error) {
 	mt.mu.RLock()
 	defer mt.mu.RUnlock()
 	if err := ctx.Err(); err != nil {

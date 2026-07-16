@@ -56,7 +56,7 @@ func serveConn(conn net.Conn, node *raft.Node, sem <-chan struct{}) {
 			}
 			resp := node.HandleRequestVote(req)
 			rawResp, _ := json.Marshal(resp)
-			if err := writeFrame(ctx, conn, Envelope{Type: TypeRequestVoteResponse, Body: rawResp}); err != nil {
+			if err := writeFrame(ctx, conn, envelope{Type: TypeRequestVoteResponse, Body: rawResp}); err != nil {
 				cancel()
 				return
 			}
@@ -69,7 +69,7 @@ func serveConn(conn net.Conn, node *raft.Node, sem <-chan struct{}) {
 			}
 			resp := node.HandleAppendEntries(req)
 			rawResp, _ := json.Marshal(resp)
-			if err := writeFrame(ctx, conn, Envelope{Type: TypeAppendEntriesResponse, Body: rawResp}); err != nil {
+			if err := writeFrame(ctx, conn, envelope{Type: TypeAppendEntriesResponse, Body: rawResp}); err != nil {
 				cancel()
 				return
 			}

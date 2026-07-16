@@ -11,21 +11,21 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-type GRPCTransport struct {
+type gRPCTransport struct {
 	mu sync.RWMutex
 
 	peerAddr map[int]string
 	conns    map[int]*grpc.ClientConn
 }
 
-func New(peerAddr map[int]string) *GRPCTransport {
-	return &GRPCTransport{
+func New(peerAddr map[int]string) raft.Transporter {
+	return &gRPCTransport{
 		peerAddr: peerAddr,
 		conns:    make(map[int]*grpc.ClientConn),
 	}
 }
 
-func (t *GRPCTransport) getOrConnect(timeout time.Duration, peer int, addr string) (*grpc.ClientConn, error) {
+func (t *gRPCTransport) getOrConnect(timeout time.Duration, peer int, addr string) (*grpc.ClientConn, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -47,7 +47,7 @@ func (t *GRPCTransport) getOrConnect(timeout time.Duration, peer int, addr strin
 	return t.conns[peer], nil
 }
 
-func (t *GRPCTransport) RequestVote(ctx context.Context, peer int, req raft.RequestVoteRequest) (raft.RequestVoteResponse, error) {
+func (t *gRPCTransport) RequestVote(ctx context.Context, peer int, req raft.RequestVoteRequest) (raft.RequestVoteResponse, error) {
 	if err := ctx.Err(); err != nil {
 		return raft.RequestVoteResponse{}, err
 	}
@@ -70,7 +70,7 @@ func (t *GRPCTransport) RequestVote(ctx context.Context, peer int, req raft.Requ
 	return fromRPCVoteResp(res), err
 }
 
-func (t *GRPCTransport) AppendEntries(ctx context.Context, peer int, req raft.AppendEntriesRequest) (raft.AppendEntriesResponse, error) {
+func (t *gRPCTransport) AppendEntries(ctx context.Context, peer int, req raft.AppendEntriesRequest) (raft.AppendEntriesResponse, error) {
 	if err := ctx.Err(); err != nil {
 		return raft.AppendEntriesResponse{}, err
 	}
